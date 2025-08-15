@@ -1,6 +1,6 @@
 ## Diário de Desenvolvimento
 
-Este documento serve como um registro colaborativo do progresso, decisões e desafios encontrados durante o desenvolvimento da linguagem Coffe.
+Este documento serve como um registro colaborativo do progresso, decisões e desafios encontrados durante o desenvolvimento da linguagem Coffee.
 
 ### Regras de Uso
 
@@ -15,10 +15,10 @@ Este documento serve como um registro colaborativo do progresso, decisões e des
 #### **Semana 1: Fundamentos e Planejamento (20/05/2024 - 24/05/2024)**
 
 * **Resumo da Semana:**
-    A primeira semana foi focada na estruturação inicial do projeto Coffe. Definimos a visão geral da linguagem, seu público-alvo e objetivos, e o tipo/paradigma. A equipe foi formalizada com a distribuição de papéis e responsabilidades, e os protocolos de colaboração foram estabelecidos. Um cronograma preliminar foi criado para guiar as próximas etapas.
+    A primeira semana foi focada na estruturação inicial do projeto Coffee. Definimos a visão geral da linguagem, seu público-alvo e objetivos, e o tipo/paradigma. A equipe foi formalizada com a distribuição de papéis e responsabilidades, e os protocolos de colaboração foram estabelecidos. Um cronograma preliminar foi criado para guiar as próximas etapas.
 
 * **Decisões Tomadas:**
-    * **Nome da Linguagem:** Coffe, com a analogia de "grãos" (dados) e "filtro" (compilador Strainer).
+    * **Nome da Linguagem:** Coffee, com a analogia de "grãos" (dados) e "filtro" (compilador Strainer).
     * **Público-Alvo:** Iniciantes em ciência de dados, com foco em simplificar a manipulação de dados.
     * **Ferramentas:** Jira para gestão de tarefas e GitHub para controle de versão.
     * **Reuniões:** Uma reunião síncrona semanal.
