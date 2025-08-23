@@ -74,7 +74,7 @@ Símbolos para agrupar e separar elementos.
 Texto ignorado pelo compilador. Começa com `#` e vai até o final da linha.
 
   * $char\_comentario = \\Sigma - { '\\n' }$
-  * $L\_{comment} = \# \\ (char\_comentario)^* \\ ('\\n' \\ | \\ \\epsilon)$
+  * $L\_{comment} = \\ (char\_comentario)^* \\ ('\\n' \\ | \\ \\epsilon)$
       * O símbolo `epsilon` ($\\epsilon$) representa o caso de um comentário na última linha do arquivo sem um `\n`.
 
 -----
