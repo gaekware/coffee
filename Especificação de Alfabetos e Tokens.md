@@ -6,9 +6,9 @@ Esta entrega detalha a especificação formal do alfabeto e dos tokens da lingua
 
 ## 1\. Especificação Completa do Alfabeto (`Σ`)
 
-O alfabeto da Coffee, denotado por $\\Sigma$, é o conjunto de todos os caracteres válidos que podem ser utilizados para escrever um programa. Para manter a simplicidade e a familiaridade para nosso público-alvo (iniciantes com conhecimento em Python), escolhemos um subconjunto do padrão ASCII.
+O alfabeto da Coffee, denotado por $\\Coffe$, é o conjunto de todos os caracteres válidos que podem ser utilizados para escrever um programa. Para manter a simplicidade e a familiaridade para nosso público-alvo (iniciantes com conhecimento em Python), escolhemos um subconjunto do padrão ASCII.
 
-O alfabeto $\\alfabeto\_coffee$ é definido pela união dos seguintes conjuntos de caracteres:
+O alfabeto $\\coffee$ é definido pela união dos seguintes conjuntos de caracteres:
 
   * **Letras Minúsculas (`letra_min`):**
     `{ a, b, c, ..., z }`
@@ -56,7 +56,7 @@ Nomes para variáveis (que armazenarão dados). Devem começar com uma letra ou 
 Valores de dados fixos.
 
   * **String:** Uma sequência de quaisquer caracteres entre aspas duplas. Para simplificar, não permitiremos aspas duplas dentro da string.
-      * char\_string = \\Sigma - { " }
+      * char\_string = $coffee$ - { " }
       * L\_{string} = " (char\_string)^\* "
   * **Número (Inteiro e Ponto Flutuante):**
       * **Inteiro:** Uma sequência de um ou mais dígitos.
@@ -87,7 +87,7 @@ Símbolos para agrupar e separar elementos.
 
 Texto ignorado pelo compilador. Começa com `#` e vai até o final da linha.
 
-  * char\_comentario = \\Sigma - { '\\n' }
+  * char\_comentario = $coffee$ - { '\\n' }
   * L\_{comment} = \\ (char\_comentario)^* \\ ('\\n' \\ | )
 
 
