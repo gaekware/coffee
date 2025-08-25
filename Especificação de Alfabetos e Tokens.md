@@ -8,13 +8,25 @@ Esta entrega detalha a especificação formal do alfabeto e dos tokens da lingua
 
 O alfabeto da Coffee, denotado por $\\Sigma$, é o conjunto de todos os caracteres válidos que podem ser utilizados para escrever um programa. Para manter a simplicidade e a familiaridade para nosso público-alvo (iniciantes com conhecimento em Python), escolhemos um subconjunto do padrão ASCII.
 
-O alfabeto $\\Sigma$ é definido pela união dos seguintes conjuntos de caracteres:
+O alfabeto $\\alfabeto\_coffee$ é definido pela união dos seguintes conjuntos de caracteres:
 
-  * **Alfabeto Coffee (`coffee`):**
-    `{ a-z, A-Z, 0-9, =, >, <, !, +, -, *, /, (, ), ", ., ,, ' ', '\t', '\n', '\r', _, # }`
+  * **Letras Minúsculas (`letra_min`):**
+    `{ a, b, c, ..., z }`
+  * **Letras Maiúsculas (`letra_mai`):**
+    `{ A, B, C, ..., Z }`
+  * **Dígitos (`digito`):**
+    `{ 0, 1, 2, ..., 9 }`
+  * **Operadores (`op`):**
+    `{ =, >, <, !, +,-, *, / }`
+  * **Delimitadores (`delim`):**
+    `{ (, ), ", ., , }`
+  * **Caracteres de Espaçamento (`espaco`):**
+    `{ ' ', '\t', '\n', '\r' }` (espaço, tabulação, nova linha, retorno de carro)
+  * **Outros Símbolos (`outros`):**
+    `{ _, # }` (underscore, cerquilha para comentários)
 
 Formalmente, o alfabeto completo é:
-$\\Sigma = coffee$
+$\\alfabeto\_coffee$ = letra\_min U letra\_mai U digito U op U delim U espaco U outros$
 
 -----
 
@@ -26,15 +38,17 @@ Tokens são as unidades léxicas elementares da linguagem, formadas a partir de 
 
 Um conjunto finito de palavras com significado reservado.
 
-  * **Linguagem:** $L\_{keywords} = { {load, filter, select, display, where} }$
+  * **Linguagem:** $L\_{keywords} = { \\text{load, filter, select, display, where} }$
 
 #### b. Identificadores (Identifiers)
 
 Nomes para variáveis (que armazenarão dados). Devem começar com uma letra ou underscore, seguido por qualquer combinação de letras, dígitos ou underscores.
 
   * **Conjuntos base:**
-      * $letra = coffee$
-  * **Linguagem:** $L\_{id} = inicio\_id \\ (corpo\_id)^*$
+      * letra = letra\_min U letra\_mai$
+      * inicio\_id = letra U { \_ }$
+      * corpo\_id = letra U digito U { \_ }$
+  * **Linguagem:** $L\_{id} = inicio\_id \\ (corpo\_id)\*
       * Isso representa a concatenação de um caractere do conjunto `inicio_id` com zero ou mais caracteres (Fechamento de Kleene) do conjunto `corpo_id`.
 
 #### c. Literais (Literals)
@@ -42,26 +56,26 @@ Nomes para variáveis (que armazenarão dados). Devem começar com uma letra ou 
 Valores de dados fixos.
 
   * **String:** Uma sequência de quaisquer caracteres entre aspas duplas. Para simplificar, não permitiremos aspas duplas dentro da string.
-      * $char\_string = \\Sigma - { " }$
-      * $L\_{string} = " (char\_string)^* "$
+      * char\_string = \\Sigma - { " }
+      * L\_{string} = " (char\_string)^\* "
   * **Número (Inteiro e Ponto Flutuante):**
       * **Inteiro:** Uma sequência de um ou mais dígitos.
-          * $L\_{int} = (digito)^+$
+          * L\_{int} = (digito)^+
       * **Ponto Flutuante:** Uma sequência de dígitos, um ponto, e outra sequência de dígitos.
-          * $L\_{float} = (digito)^+ . (digito)^+$
+          * L\_{float} = (digito)^+ . (digito)^+
       * **Número (geral):** A união das duas linguagens.
-          * $L\_{num} = L\_{int} U L\_{float}$
+          * L\_{num} = L\_{int} \\cup L\_{float}
 
 #### d. Operadores (Operators)
 
 Símbolos para realizar comparações e atribuições.
 
   * **Operadores de Comparação:**
-      * $L\_{coffee} = { >, <, ==, !=, >=, <= }$
+      * L\_{op\_comp} = { \>, \<, ==, \!=, \>=, \<= }
   * **Operador de Atribuição:**
-      * $L\_{coffee} = { = }$
+      * L\_{op\_atrib} = { = }
   * **Operadores (geral):**
-      * $L\_{coffee} = L\_{coffe}$
+      * L\_{op} = L\_{op\_comp} \\cup L\_{op\_atrib}
 
 #### e. Delimitadores (Delimiters)
 
@@ -73,9 +87,9 @@ Símbolos para agrupar e separar elementos.
 
 Texto ignorado pelo compilador. Começa com `#` e vai até o final da linha.
 
-  * $char\_comentario = \\Sigma - { '\\n' }$
-  * $L\_{comment} = \\ (char\_comentario)^* \\ ('\\n' \\ | \\ \\epsilon)$
-      * O símbolo `epsilon` ($\\epsilon$) representa o caso de um comentário na última linha do arquivo sem um `\n`.
+  * char\_comentario = \\Sigma - { '\\n' }
+  * L\_{comment} = \\ (char\_comentario)^* \\ ('\\n' \\ | )
+
 
 -----
 
