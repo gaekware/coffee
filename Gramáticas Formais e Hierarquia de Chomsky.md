@@ -250,12 +250,3 @@ Uso de parênteses:
 ```
 Term -> ... | ( LogicalExpression )
 ```
-
----
-
-✅ Com essas estratégias, a gramática Coffee se mantém **não ambígua** e **expansível** para futuras funcionalidades.
-
-```
-
-Quer que eu também faça um **sumário automático (table of contents)** no início para facilitar a navegação do documento em Markdown?
-```
