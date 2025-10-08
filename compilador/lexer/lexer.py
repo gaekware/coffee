@@ -1,89 +1,143 @@
-import re
 import sys
 
-# Especificação dos tokens usando Expressões Regulares, conforme a documentação
-TOKEN_SPECIFICATION = [
-    ('COMMENT',       r'#[^\n]*'),              # Comentários
-    ('STRING',        r'"[^"]*"'),               # Strings literais
-    ('NUMBER',        r'[0-9]+(\.[0-9]+)?'),    # Números (inteiros e ponto flutuante)
-    ('KEYWORD',       r'\b(load|filter|select|display|where)\b'), # Palavras-chave
-    ('IDENTIFIER',    r'[a-zA-Z_][a-zA-Z0-9_]*'), # Identificadores
-    ('OP_ASSIGN',     r'='),                      # Operador de atribuição
-    ('OP_REL',        r'==|!=|>=|<=|>|<'),      # Operadores relacionais
-    ('LPAREN',        r'\('),                    # Parêntese esquerdo
-    ('RPAREN',        r'\)'),                    # Parêntese direito
-    ('COMMA',         r','),                      # Vírgula
-    ('NEWLINE',       r'\n'),                     # Nova linha (para contar linhas)
-    ('WHITESPACE',    r'[ \t]+'),                # Espaço em branco (ignorado)
-    ('MISMATCH',      r'.'),                      # Qualquer outro caractere (erro)
-]
+# Definições de classes de caracteres para simplificar a tabela de transição
+def get_char_class(char):
+    if char.isalpha() or char == '_': return 'letra'
+    if char.isdigit(): return 'digito'
+    if char == '.': return 'ponto'
+    if char == '"': return 'aspas'
+    if char in ' \t\r\n': return 'espaco'
+    return char # Retorna o próprio caractere para operadores e delimitadores
 
-# Compila as expressões regulares em uma única
-TOKEN_REGEX = re.compile('|'.join('(?P<%s>%s)' % pair for pair in TOKEN_SPECIFICATION))
+# Tabela de transições do AFD (baseada no diagrama Mermaid)
+# Formato: dfa_table[estado_atual][classe_do_char] = proximo_estado
+DFA_TABLE = {
+    'S0': {'letra': 'S1_ID', 'digito': 'S2_NUM', '>': 'S4_GT', '<': 'S5_LT', '=': 'S6_EQ', '!': 'S7_NE', 'aspas': 'S8_STR', '(': 'S9_LPAREN', ')': 'S10_RPAREN', ',': 'S11_COMMA', '#': 'S12_COMMENT'},
+    'S1_ID': {'letra': 'S1_ID', 'digito': 'S1_ID'},
+    'S2_NUM': {'digito': 'S2_NUM', 'ponto': 'S3_FLOAT'},
+    'S3_FLOAT': {'digito': 'S3_FLOAT_NUM'},
+    'S3_FLOAT_NUM': {'digito': 'S3_FLOAT_NUM'},
+    'S4_GT': {'=': 'S4_GE'},
+    'S5_LT': {'=': 'S5_LE'},
+    'S6_EQ': {'=': 'S6_EQEQ'},
+    'S7_NE': {'=': 'S7_NE_EQ'},
+    'S8_STR': {'aspas': 'S8_END_STR'}, # Transição para qualquer outro char é implícita
+    'S12_COMMENT': {}, # Transição para qualquer char exceto \n é implícita
+}
 
-def analyze(code):
-    tokens = []
-    line_num = 1
-    line_start = 0
+# Mapeia estados de aceitação para tipos de token
+ACCEPTING_STATES = {
+    'S1_ID': 'IDENTIFIER',
+    'S2_NUM': 'NUMBER',
+    'S3_FLOAT_NUM': 'NUMBER',
+    'S4_GT': 'OP_REL',
+    'S4_GE': 'OP_REL',
+    'S5_LT': 'OP_REL',
+    'S5_LE': 'OP_REL',
+    'S6_EQ': 'OP_ASSIGN',
+    'S6_EQEQ': 'OP_REL',
+    'S7_NE_EQ': 'OP_REL',
+    'S8_END_STR': 'STRING',
+    'S9_LPAREN': 'LPAREN',
+    'S10_RPAREN': 'RPAREN',
+    'S11_COMMA': 'COMMA',
+    'S12_COMMENT': 'COMMENT',
+}
 
-    # Itera sobre todas as correspondências encontradas no código
-    for mo in TOKEN_REGEX.finditer(code):
-        kind = mo.lastgroup
-        value = mo.group()
-        column = mo.start() - line_start
+KEYWORDS = {'load', 'filter', 'select', 'display', 'where'}
 
-        if kind == 'NEWLINE':
-            line_start = mo.end()
-            line_num += 1
-            continue
-        elif kind in ('WHITESPACE', 'COMMENT'):
-            continue
-        elif kind == 'MISMATCH':
-            # Se um caractere inválido for encontrado, reporta o erro e encerra
-            print(f"Erro Léxico: Caractere não reconhecido '{value}' na linha {line_num}, coluna {column + 1}.")
-            return None
+class Lexer:
+    def __init__(self, source_code):
+        self.source = source_code
+        self.position = 0
+        self.line = 1
+        self.col = 1
 
-        tokens.append((value, kind))
+    def next_token(self):
+        while self.position < len(self.source):
+            char = self.source[self.position]
 
-    return tokens
+            if get_char_class(char) == 'espaco':
+                if char == '\n':
+                    self.line += 1
+                    self.col = 1
+                else:
+                    self.col += 1
+                self.position += 1
+                continue
 
-def print_token_table(tokens):
-    # Determina a largura máxima para cada coluna
-    max_token_len = max(len(token) for token, kind in tokens) if tokens else 5
-    max_kind_len = max(len(kind) for token, kind in tokens) if tokens else 4
+            current_state = 'S0'
+            lexeme = ""
+            last_accepted_state = None
+            last_accepted_position = self.position
 
-    # Cabeçalho da tabela
-    header = f"| {'Token'.ljust(max_token_len)} | {'Tipo'.ljust(max_kind_len)} |"
-    separator = f"+-{'-' * max_token_len}-+-{'-' * max_kind_len}-+"
+            temp_pos = self.position
+            while temp_pos < len(self.source):
+                char_to_process = self.source[temp_pos]
+                char_class = get_char_class(char_to_process)
+                
+                # Tratamento especial para strings e comentários
+                if current_state == 'S8_STR' and char_class != 'aspas':
+                    next_state = 'S8_STR'
+                elif current_state == 'S12_COMMENT' and char_to_process != '\n':
+                    next_state = 'S12_COMMENT'
+                else:
+                    next_state = DFA_TABLE.get(current_state, {}).get(char_class)
 
-    print(separator)
-    print(header)
-    print(separator)
+                if next_state is None:
+                    break # Fim do token (nenhuma transição)
+                
+                current_state = next_state
+                temp_pos += 1
+                
+                if current_state in ACCEPTING_STATES:
+                    last_accepted_state = current_state
+                    last_accepted_position = temp_pos
+            
+            if last_accepted_state is None:
+                # Se nenhum estado de aceitação foi alcançado, é um erro
+                raise ValueError(f"Erro Léxico: Token inválido '{self.source[self.position]}' na linha {self.line}, coluna {self.col}")
 
-    # Corpo da tabela
-    for token, kind in tokens:
-        print(f"| {token.ljust(max_token_len)} | {kind.ljust(max_kind_len)} |")
-    
-    print(separator)
+            lexeme = self.source[self.position:last_accepted_position]
+            token_type = ACCEPTING_STATES[last_accepted_state]
 
+            # Atualiza a posição e coluna
+            self.col += len(lexeme)
+            self.position = last_accepted_position
+
+            # Descarta comentários
+            if last_accepted_state == 'S12_COMMENT':
+                continue
+            
+            # Verifica se um IDENTIFIER é uma KEYWORD
+            if token_type == 'IDENTIFIER' and lexeme in KEYWORDS:
+                token_type = 'KEYWORD'
+            
+            return (lexeme, token_type)
+
+        return None # Fim do arquivo
+
+# Bloco de execução principal
 if __name__ == '__main__':
-    # Garante que o nome do arquivo foi passado como argumento
     if len(sys.argv) != 2:
         print("Uso: python lexer.py <caminho_para_o_arquivo.coffee>")
         sys.exit(1)
 
     file_path = sys.argv[1]
-
     try:
         with open(file_path, 'r') as f:
-            source_code = f.read()
+            code = f.read()
     except FileNotFoundError:
         print(f"Erro: O arquivo '{file_path}' não foi encontrado.")
         sys.exit(1)
-
-    # Analisa o código e imprime o resultado
-    recognized_tokens = analyze(source_code)
+        
+    lexer = Lexer(code)
+    print(f"Analisando o arquivo: {file_path}\n")
+    print(f"| {'Token'.ljust(20)} | {'Tipo'.ljust(15)} |")
+    print(f"+{'-'*22}+{'-'*17}+")
     
-    if recognized_tokens:
-        print(f"Análise léxica do arquivo '{file_path}' concluída com sucesso:\n")
-        print_token_table(recognized_tokens)
+    try:
+        while (token := lexer.next_token()):
+            print(f"| {token[0].ljust(20)} | {token[1].ljust(15)} |")
+    except ValueError as e:
+        print(e)
