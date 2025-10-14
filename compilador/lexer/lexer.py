@@ -6,13 +6,14 @@ def get_char_class(char):
     if char.isdigit(): return 'digito'
     if char == '.': return 'ponto'
     if char == '"': return 'aspas'
-    if char in ' \t\r\n': return 'espaco'
-    return char # Retorna o próprio caractere para operadores e delimitadores
+    if char in ' \t\r': return 'espaco' 
+    if char == '\n': return 'novalinha'
+    return 'outro'
 
 # Tabela de transições do AFD (baseada no diagrama Mermaid)
 # Formato: dfa_table[estado_atual][classe_do_char] = proximo_estado
-DFA_TABLE = {
-    'S0': {'letra': 'S1_ID', 'digito': 'S2_NUM', '>': 'S4_GT', '<': 'S5_LT', '=': 'S6_EQ', '!': 'S7_NE', 'aspas': 'S8_STR', '(': 'S9_LPAREN', ')': 'S10_RPAREN', ',': 'S11_COMMA', '#': 'S12_COMMENT'},
+DFA_TRANSITIONS = {
+    'S0': {'letra': 'S1_ID', 'digito': 'S2_NUM', '>': 'S4_GT', '<': 'S5_LT', '=': 'S6_EQ', '!': 'S7_NE', 'aspas': 'S8_STR', '(': 'S9_LPAREN', ')': 'S10_RPAREN', ',': 'S11_COMMA', '#': 'S12_COMMENT', 'espaco': 'S13_SPACE', 'novalinha': 'S14_NEWLINE'},
     'S1_ID': {'letra': 'S1_ID', 'digito': 'S1_ID'},
     'S2_NUM': {'digito': 'S2_NUM', 'ponto': 'S3_FLOAT'},
     'S3_FLOAT': {'digito': 'S3_FLOAT_NUM'},
@@ -21,12 +22,13 @@ DFA_TABLE = {
     'S5_LT': {'=': 'S5_LE'},
     'S6_EQ': {'=': 'S6_EQEQ'},
     'S7_NE': {'=': 'S7_NE_EQ'},
-    'S8_STR': {'aspas': 'S8_END_STR'}, # Transição para qualquer outro char é implícita
-    'S12_COMMENT': {}, # Transição para qualquer char exceto \n é implícita
+    'S8_STR': {'aspas': 'S8_END_STR', 'letra': 'S8_STR', 'digito': 'S8_STR', 'outro': 'S8_STR', 'espaco': 'S8_STR'},
+    'S12_COMMENT': {'letra': 'S12_COMMENT', 'digito': 'S12_COMMENT', 'outro': 'S12_COMMENT', 'espaco': 'S12_COMMENT'},
+    'S13_SPACE': {'espaco': 'S13_SPACE'},
 }
 
 # Mapeia estados de aceitação para tipos de token
-ACCEPTING_STATES = {
+DFA_ACCEPTING_STATES = {
     'S1_ID': 'IDENTIFIER',
     'S2_NUM': 'NUMBER',
     'S3_FLOAT_NUM': 'NUMBER',
@@ -42,82 +44,97 @@ ACCEPTING_STATES = {
     'S10_RPAREN': 'RPAREN',
     'S11_COMMA': 'COMMA',
     'S12_COMMENT': 'COMMENT',
+    'S13_SPACE': 'WHITESPACE',
+    'S14_NEWLINE': 'NEWLINE',
 }
 
 KEYWORDS = {'load', 'filter', 'select', 'display', 'where'}
 
+class DFA:
+    """Encapsula a lógica para executar um Autômato Finito Determinístico."""
+    def __init__(self, transitions, accepting_states):
+        self.transitions = transitions
+        self.accepting_states = accepting_states
+
+    def run(self, input_string):
+        """
+        Executa o AFD na string de entrada e retorna o lexema mais longo
+        e seu tipo de token correspondente.
+        """
+        current_state = 'S0'
+        last_accepted_info = None
+        
+        # Percorre a string para encontrar o "match" mais longo
+        for i, char in enumerate(input_string):
+            char_class = get_char_class(char)
+            
+            # Casos especiais que não estão na tabela principal para simplificar
+            if char in self.transitions.get(current_state, {}):
+                current_state = self.transitions[current_state][char]
+            elif char_class in self.transitions.get(current_state, {}):
+                current_state = self.transitions[current_state][char_class]
+            else:
+                break # Nenhuma transição, fim do token
+            
+            # Se o estado atual for de aceitação, salve-o
+            if current_state in self.accepting_states:
+                last_accepted_info = {
+                    "state": current_state,
+                    "position": i + 1
+                }
+        
+        if last_accepted_info is None:
+            # Não foi possível reconhecer nenhum token
+            raise ValueError(f"Token inválido começando com '{input_string[0]}'")
+
+        # Retorna o lexema e o tipo do último estado de aceitação válido
+        lexeme = input_string[:last_accepted_info["position"]]
+        token_type = self.accepting_states[last_accepted_info["state"]]
+        return lexeme, token_type
+
 class Lexer:
-    def __init__(self, source_code):
+    """Gerencia o processo de tokenização do código-fonte."""
+    def __init__(self, source_code, dfa):
         self.source = source_code
+        self.dfa = dfa
         self.position = 0
         self.line = 1
         self.col = 1
 
     def next_token(self):
+        """Retorna o próximo token válido do código-fonte."""
         while self.position < len(self.source):
-            char = self.source[self.position]
-
-            if get_char_class(char) == 'espaco':
-                if char == '\n':
-                    self.line += 1
-                    self.col = 1
-                else:
-                    self.col += 1
-                self.position += 1
-                continue
-
-            current_state = 'S0'
-            lexeme = ""
-            last_accepted_state = None
-            last_accepted_position = self.position
-
-            temp_pos = self.position
-            while temp_pos < len(self.source):
-                char_to_process = self.source[temp_pos]
-                char_class = get_char_class(char_to_process)
-                
-                # Tratamento especial para strings e comentários
-                if current_state == 'S8_STR' and char_class != 'aspas':
-                    next_state = 'S8_STR'
-                elif current_state == 'S12_COMMENT' and char_to_process != '\n':
-                    next_state = 'S12_COMMENT'
-                else:
-                    next_state = DFA_TABLE.get(current_state, {}).get(char_class)
-
-                if next_state is None:
-                    break # Fim do token (nenhuma transição)
-                
-                current_state = next_state
-                temp_pos += 1
-                
-                if current_state in ACCEPTING_STATES:
-                    last_accepted_state = current_state
-                    last_accepted_position = temp_pos
+            remaining_code = self.source[self.position:]
             
-            if last_accepted_state is None:
-                # Se nenhum estado de aceitação foi alcançado, é um erro
-                raise ValueError(f"Erro Léxico: Token inválido '{self.source[self.position]}' na linha {self.line}, coluna {self.col}")
+            try:
+                lexeme, token_type = self.dfa.run(remaining_code)
+            except ValueError as e:
+                # Adiciona contexto de linha/coluna ao erro do DFA
+                raise ValueError(f"{e} na linha {self.line}, coluna {self.col}")
 
-            lexeme = self.source[self.position:last_accepted_position]
-            token_type = ACCEPTING_STATES[last_accepted_state]
+            # Atualiza posição, linha e coluna
+            self.position += len(lexeme)
+            lines_in_lexeme = lexeme.count('\n')
+            if lines_in_lexeme > 0:
+                self.line += lines_in_lexeme
+                # Encontra a posição da última nova linha para resetar a coluna
+                self.col = len(lexeme) - lexeme.rfind('\n')
+            else:
+                self.col += len(lexeme)
 
-            # Atualiza a posição e coluna
-            self.col += len(lexeme)
-            self.position = last_accepted_position
-
-            # Descarta comentários
-            if last_accepted_state == 'S12_COMMENT':
+            # Ignora tokens que não são relevantes para o parser
+            if token_type in ['WHITESPACE', 'COMMENT', 'NEWLINE']:
                 continue
             
-            # Verifica se um IDENTIFIER é uma KEYWORD
+            # Converte IDENTIFIER para KEYWORD, se aplicável
             if token_type == 'IDENTIFIER' and lexeme in KEYWORDS:
                 token_type = 'KEYWORD'
-            
+
             return (lexeme, token_type)
 
-        return None # Fim do arquivo
+        return None # Fim do arquivo (End of File)
 
-# Bloco de execução principal
+
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         print("Uso: python lexer.py <caminho_para_o_arquivo.coffee>")
@@ -131,7 +148,13 @@ if __name__ == '__main__':
         print(f"Erro: O arquivo '{file_path}' não foi encontrado.")
         sys.exit(1)
         
-    lexer = Lexer(code)
+    # 1. Cria a instância do DFA
+    coffee_dfa = DFA(DFA_TRANSITIONS, DFA_ACCEPTING_STATES)
+    
+    # 2. Cria a instância do Lexer, injetando o DFA
+    lexer = Lexer(code, coffee_dfa)
+    
+    # 3. Processa e imprime os tokens
     print(f"Analisando o arquivo: {file_path}\n")
     print(f"| {'Token'.ljust(20)} | {'Tipo'.ljust(15)} |")
     print(f"+{'-'*22}+{'-'*17}+")
