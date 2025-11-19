@@ -1,4 +1,110 @@
 import sys
+from abc import ABC, abstractmethod
+
+"""
+PARSER COM CONSTRUÇÃO DE AST PARA LINGUAGEM COFFEE
+=================================================
+
+Este parser implementa análise sintática descendente recursiva (LL(1))
+e constrói uma Árvore Sintática Abstrata (AST) para ser consumida 
+pela fase de análise semântica.
+
+Estrutura da AST:
+- ProgramNode: nó raiz contendo lista de statements
+- StatementNode: classe base para comandos (display, assignment)
+- ExpressionNode: classe base para expressões (load, filter, select)
+- TermNode: nós folha (identificadores, números, strings)
+- RelationalExpressionNode: nós para comparações
+
+A AST construída preserva a estrutura hierárquica do programa
+e facilita a análise semântica posterior.
+"""
+
+# ===== AST NODE CLASSES =====
+
+class ASTNode(ABC):
+    """Classe base abstrata para todos os nós da AST"""
+    pass
+
+class ProgramNode(ASTNode):
+    """Nó raiz do programa - contém lista de statements"""
+    def __init__(self, statements):
+        self.statements = statements
+    
+    def __repr__(self):
+        return f"Program({self.statements})"
+
+class StatementNode(ASTNode):
+    """Classe base para todos os statements"""
+    pass
+
+class DisplayStatementNode(StatementNode):
+    """Nó para comando display"""
+    def __init__(self, identifier):
+        self.identifier = identifier
+    
+    def __repr__(self):
+        return f"Display({self.identifier})"
+
+class AssignmentStatementNode(StatementNode):
+    """Nó para comando de atribuição"""
+    def __init__(self, identifier, expression):
+        self.identifier = identifier
+        self.expression = expression
+    
+    def __repr__(self):
+        return f"Assignment({self.identifier} = {self.expression})"
+
+class ExpressionNode(ASTNode):
+    """Classe base para expressões"""
+    pass
+
+class LoadExpressionNode(ExpressionNode):
+    """Nó para expressão load"""
+    def __init__(self, file_path):
+        self.file_path = file_path
+    
+    def __repr__(self):
+        return f"Load({self.file_path})"
+
+class FilterExpressionNode(ExpressionNode):
+    """Nó para expressão filter"""
+    def __init__(self, dataset, condition):
+        self.dataset = dataset
+        self.condition = condition
+    
+    def __repr__(self):
+        return f"Filter({self.dataset}, {self.condition})"
+
+class SelectExpressionNode(ExpressionNode):
+    """Nó para expressão select"""
+    def __init__(self, dataset, columns):
+        self.dataset = dataset
+        self.columns = columns
+    
+    def __repr__(self):
+        return f"Select({self.dataset}, {self.columns})"
+
+class RelationalExpressionNode(ExpressionNode):
+    """Nó para expressão relacional (comparação)"""
+    def __init__(self, left, operator, right):
+        self.left = left
+        self.operator = operator
+        self.right = right
+    
+    def __repr__(self):
+        return f"({self.left} {self.operator} {self.right})"
+
+class TermNode(ASTNode):
+    """Nó para termos (identificadores, números, strings)"""
+    def __init__(self, value, term_type):
+        self.value = value
+        self.type = term_type  # 'IDENTIFIER', 'NUMBER', 'STRING'
+    
+    def __repr__(self):
+        return f"{self.type}({self.value})"
+
+# ===== LEXER CLASSES =====
 
 def get_char_class(char):
     if char.isalpha() or char == '_': return 'letra'
@@ -156,40 +262,46 @@ class Parser:
     def eat(self, expected_type):
         """
         Consome o token atual se ele for do tipo esperado.
-        Se for, avança para o próximo token.
+        Se for, avança para o próximo token e retorna o token consumido.
         Se não for, lança um erro.
         """
         if self.current_token.type == expected_type:
+            token = self.current_token
             self.current_token = self.lexer.next_token()
+            return token
         else:
             self.error(expected_type)
 
     def parse(self):
-        """Ponto de entrada principal do parser."""
-        self.program()
+        """Ponto de entrada principal do parser. Retorna a AST."""
+        ast = self.program()
         if self.current_token.type != 'EOF':
             tok = self.current_token
             raise SyntaxError(
                 f"Erro de Sintaxe: Código inesperado no final do programa. "
                 f"Token '{tok.value}' ({tok.type}) na linha {tok.line}, coluna {tok.col}"
             )
-        return True
+        return ast
 
     def program(self):
         """<Program> ::= <StatementList>"""
-        self.statement_list()
+        statements = self.statement_list()
+        return ProgramNode(statements)
 
     def statement_list(self):
         """<StatementList> ::= { <Statement> }"""
+        statements = []
         while self.current_token.type != 'EOF':
-            self.statement()
+            stmt = self.statement()
+            statements.append(stmt)
+        return statements
 
     def statement(self):
         """<Statement> ::= <DisplayStatement> | <AssignmentStatement>"""
         if self.current_token.type == 'DISPLAY':
-            self.display_statement()
+            return self.display_statement()
         elif self.current_token.type == 'IDENTIFIER':
-            self.assignment_statement()
+            return self.assignment_statement()
         else:
             tok = self.current_token
             raise SyntaxError(
@@ -200,13 +312,15 @@ class Parser:
     def display_statement(self):
         """<DisplayStatement> ::= "display" identifier"""
         self.eat('DISPLAY')
-        self.eat('IDENTIFIER')
+        identifier_token = self.eat('IDENTIFIER')
+        return DisplayStatementNode(identifier_token.value)
 
     def assignment_statement(self):
         """<AssignmentStatement> ::= identifier "=" <AssignmentRHS>"""
-        self.eat('IDENTIFIER')
+        identifier_token = self.eat('IDENTIFIER')
         self.eat('ASSIGN')
-        self.assignment_rhs()
+        expression = self.assignment_rhs()
+        return AssignmentStatementNode(identifier_token.value, expression)
 
     def assignment_rhs(self):
         """
@@ -215,68 +329,133 @@ class Parser:
                           | <SelectRHS>
         """
         if self.current_token.type == 'LOAD':
-            self.load_invocation()
+            return self.load_invocation()
         elif self.current_token.type == 'FILTER':
-            self.filter_rhs()
+            return self.filter_rhs()
         elif self.current_token.type == 'SELECT':
-            self.select_rhs()
+            return self.select_rhs()
         else:
             self.error("'load', 'filter' ou 'select' após o '='")
 
     def load_invocation(self):
         """<LoadInvocation> ::= "load" string_literal"""
         self.eat('LOAD')
-        self.eat('STRING')
+        string_token = self.eat('STRING')
+        return LoadExpressionNode(string_token.value)
 
     def filter_rhs(self):
         """<FilterRHS> ::= "filter" identifier "where" <LogicalExpression>"""
         self.eat('FILTER')
-        self.eat('IDENTIFIER')
+        dataset_token = self.eat('IDENTIFIER')
         self.eat('WHERE')
-        self.logical_expression()
+        condition = self.logical_expression()
+        return FilterExpressionNode(dataset_token.value, condition)
 
     def select_rhs(self):
         """<SelectRHS> ::= "select" identifier "(" <ColumnList> ")" """
         self.eat('SELECT')
-        self.eat('IDENTIFIER')
+        dataset_token = self.eat('IDENTIFIER')
         self.eat('LPAREN')
-        self.column_list()
+        columns = self.column_list()
         self.eat('RPAREN')
+        return SelectExpressionNode(dataset_token.value, columns)
 
     def column_list(self):
         """<ColumnList> ::= identifier { "," identifier }"""
-        self.eat('IDENTIFIER')
+        columns = []
+        first_column = self.eat('IDENTIFIER')
+        columns.append(first_column.value)
+        
         while self.current_token.type == 'COMMA':
             self.eat('COMMA')
-            self.eat('IDENTIFIER')
+            column_token = self.eat('IDENTIFIER')
+            columns.append(column_token.value)
+        
+        return columns
 
     def logical_expression(self):
         """<LogicalExpression> ::= <RelationalExpression>"""
-        self.relational_expression()
+        return self.relational_expression()
 
     def relational_expression(self):
         """<RelationalExpression> ::= <Term> <RelationalOp> <Term>"""
-        self.term()
-        self.relational_op()
-        self.term()
+        left = self.term()
+        operator = self.relational_op()
+        right = self.term()
+        return RelationalExpressionNode(left, operator, right)
 
     def relational_op(self):
         """<RelationalOp> ::= ">" | "<" | "==" | "!=" | ">=" | "<=" """
         if self.current_token.type in ('GT', 'GE', 'LT', 'LE', 'EQEQ', 'NE'):
-            self.eat(self.current_token.type)
+            op_token = self.eat(self.current_token.type)
+            # Mapeia os tipos de token para símbolos legíveis
+            op_map = {
+                'GT': '>', 'GE': '>=', 'LT': '<', 
+                'LE': '<=', 'EQEQ': '==', 'NE': '!='
+            }
+            return op_map[op_token.type]
         else:
             self.error("Operador Relacional (como '>', '==', etc.)")
 
     def term(self):
         """<Term> ::= identifier | number_literal | string_literal"""
         if self.current_token.type == 'IDENTIFIER':
-            self.eat('IDENTIFIER')
+            token = self.eat('IDENTIFIER')
+            return TermNode(token.value, 'IDENTIFIER')
         elif self.current_token.type == 'NUMBER':
-            self.eat('NUMBER')
+            token = self.eat('NUMBER')
+            return TermNode(token.value, 'NUMBER')
         elif self.current_token.type == 'STRING':
-            self.eat('STRING')
+            token = self.eat('STRING')
+            return TermNode(token.value, 'STRING')
         else:
             self.error("identificador, número ou string")
+
+
+def print_ast(node, indent=0):
+    """Função auxiliar para imprimir a AST de forma hierárquica e legível"""
+    spaces = "  " * indent
+    
+    if isinstance(node, ProgramNode):
+        print(f"{spaces}Program:")
+        for stmt in node.statements:
+            print_ast(stmt, indent + 1)
+    
+    elif isinstance(node, DisplayStatementNode):
+        print(f"{spaces}Display: {node.identifier}")
+    
+    elif isinstance(node, AssignmentStatementNode):
+        print(f"{spaces}Assignment:")
+        print(f"{spaces}  Variable: {node.identifier}")
+        print(f"{spaces}  Expression:")
+        print_ast(node.expression, indent + 2)
+    
+    elif isinstance(node, LoadExpressionNode):
+        print(f"{spaces}Load: {node.file_path}")
+    
+    elif isinstance(node, FilterExpressionNode):
+        print(f"{spaces}Filter:")
+        print(f"{spaces}  Dataset: {node.dataset}")
+        print(f"{spaces}  Condition:")
+        print_ast(node.condition, indent + 2)
+    
+    elif isinstance(node, SelectExpressionNode):
+        print(f"{spaces}Select:")
+        print(f"{spaces}  Dataset: {node.dataset}")
+        print(f"{spaces}  Columns: {', '.join(node.columns)}")
+    
+    elif isinstance(node, RelationalExpressionNode):
+        print(f"{spaces}Comparison ({node.operator}):")
+        print(f"{spaces}  Left:")
+        print_ast(node.left, indent + 2)
+        print(f"{spaces}  Right:")
+        print_ast(node.right, indent + 2)
+    
+    elif isinstance(node, TermNode):
+        print(f"{spaces}{node.type}: {node.value}")
+    
+    else:
+        print(f"{spaces}Unknown node: {node}")
 
 
 if __name__ == '__main__':
@@ -298,11 +477,16 @@ if __name__ == '__main__':
         coffee_dfa = DFA(DFA_TRANSITIONS, DFA_ACCEPTING_STATES)
         lexer = Lexer(code, coffee_dfa)
         parser = Parser(lexer)
-        parser.parse()
+        ast = parser.parse()
         
-        print("="*30)
-        print("SUCESSO: A sintaxe do programa está correta!")
-        print("="*30)
+        print("="*50)
+        print("SUCESSO: Análise sintática concluída!")
+        print("="*50)
+        print("\nÁrvore Sintática Abstrata (AST):")
+        print("-" * 40)
+        print_ast(ast)
+        print("\nAST construída com sucesso! Pronta para análise semântica.")
+        print("="*50)
 
     except (ValueError, SyntaxError) as e:
         print("="*30)
